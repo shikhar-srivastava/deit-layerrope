@@ -46,6 +46,14 @@ def get_args_parser():
     parser.add_argument('--drop-path', type=float, default=0.1, metavar='PCT',
                         help='Drop path rate (default: 0.1)')
 
+    # LayerRoPE (layer_rope.py); the defaults are the initial values of our runs
+    parser.add_argument('--layer-rope', action='store_true', help='LayerRoPE norms and output gains in every block')
+    parser.add_argument('--layer-rope-alpha-init', type=float, default=0.0)
+    parser.add_argument('--layer-rope-beta-init', type=float, default=0.0)
+    parser.add_argument('--layer-rope-alpha-rot-init', type=float, default=0.0)
+    parser.add_argument('--layer-rope-beta-rot-init', type=float, default=-0.5)
+    parser.add_argument('--layer-rope-base-freq', type=float, default=100.0)
+
     parser.add_argument('--model-ema', action='store_true')
     parser.add_argument('--no-model-ema', action='store_false', dest='model_ema')
     parser.set_defaults(model_ema=True)
@@ -270,7 +278,11 @@ def main(args):
         img_size=args.input_size
     )
 
-                    
+    if args.layer_rope:
+        from layer_rope import apply_layer_rope
+        apply_layer_rope(model, args.layer_rope_alpha_init, args.layer_rope_beta_init, args.layer_rope_alpha_rot_init,
+                         args.layer_rope_beta_rot_init, args.layer_rope_base_freq)
+
     if args.finetune:
         if args.finetune.startswith('https'):
             checkpoint = torch.hub.load_state_dict_from_url(

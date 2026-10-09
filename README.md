@@ -1,5 +1,8 @@
 # Data-Efficient architectures and training for Image classification
 
+> [!NOTE]
+> This fork adds **LayerRoPE** to DeiT, for the ViT-Tiny and ViT-Small experiments of *LayerRoPE: Dynamic Depth-wise Magnitude & Angular Superposition* ([main repository](https://github.com/shikhar-srivastava/layer-rope)). See [LayerRoPE](#layerrope) below; everything else is upstream DeiT at [`7e160fe`](https://github.com/facebookresearch/deit/tree/7e160fe).
+
 This repository contains PyTorch evaluation code, training code and pretrained models for the following papers:
 <details>
 <summary>
@@ -105,6 +108,23 @@ This repository contains PyTorch evaluation code, training code and pretrained m
 ```
 </details>
 If you find this repository useful, please consider giving a star ⭐ and cite the relevant papers. 
+
+# LayerRoPE
+
+LayerRoPE replaces the per-layer normalization gains with one shared gain γ per site (the input and output of the attention and MLP blocks), scaled and rotated by a depth-conditioned complex factor:
+
+γ<sub>ℓ</sub> = γ ⊙<sub>c</sub> exp(r(ℓ) + iθ(ℓ, j)),  r(ℓ) = α + β log(ℓ+1),  θ(ℓ, j) = exp(α<sub>rot</sub> + β<sub>rot</sub> log(ℓ+1)) · b<sup>−2j/d</sup>
+
+where ⊙<sub>c</sub> multiplies the pairs (γ<sub>2j</sub>, γ<sub>2j+1</sub>) as complex numbers. With `--layer-rope`, the two LayerNorms of every block take their gains from these shared gains (each keeps its centering and its own bias), and the attention and MLP outputs are scaled by them before the residual additions ([`layer_rope.py`](layer_rope.py)); the final LayerNorm is unchanged. The depth slopes start at β = 0 (magnitude) and β<sub>rot</sub> = −0.5 (rotation), with α = α<sub>rot</sub> = 0 and b = 100 (`--layer-rope-*` in [`main.py`](main.py)).
+
+We trained ViT-Tiny and ViT-Small for 300 epochs with the DeiT recipe on 4 GPUs, with and without `--layer-rope`:
+
+```bash
+torchrun --nproc_per_node=4 main.py --model deit_small_patch16_224 --batch-size 256 --data-path /path/to/imagenet --output_dir /path/to/save --layer-rope
+torchrun --nproc_per_node=4 main.py --model deit_tiny_patch16_224 --batch-size 256 --data-path /path/to/imagenet --output_dir /path/to/save --layer-rope
+```
+
+Our table reports, for each of top-1, top-5 and validation loss, the best value over the 300 epochs in `log.txt`. As in our runs, timm 0.3.2 exempts only 1-D parameters and biases from weight decay, so LayerRoPE's 16 scalars are weight-decayed. We used PyTorch 2.5.1, torchvision 0.20.1 and timm 0.3.2; under PyTorch 2, timm 0.3.2 needs `from torch._six import container_abcs` in `timm/models/layers/helpers.py` replaced by `import collections.abc as container_abcs`.
 
 # License
 This repository is released under the Apache 2.0 license as found in the [LICENSE](LICENSE) file.
